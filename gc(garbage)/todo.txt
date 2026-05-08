@@ -1,0 +1,214 @@
+package com.android.server.inputmethod;
+/* JADX INFO: loaded from: classes.dex */
+public class InputMethodManagerServiceImpl extends InputMethodManagerServiceStub {
+ public void makeRotateToast() {
+        this.mHandler.post(new Runnable() { // from class: com.android.server.inputmethod.InputMethodManagerServiceImpl$$ExternalSyntheticLambda5
+            @Override // java.lang.Runnable
+            public final void run() {
+                this.f$0.lambda$makeRotateToast$1();
+            }
+        });
+    }
+
+    /* JADX INFO: Access modifiers changed from: private */
+    public /* synthetic */ void lambda$makeRotateToast$1() {
+        Toast.makeText(this.mContext, this.mContext.getString(286196819), 1000).show();
+        this.mToastPending = true;
+        this.mHandler.postDelayed(new Runnable() { // from class: com.android.server.inputmethod.InputMethodManagerServiceImpl$$ExternalSyntheticLambda6
+            @Override // java.lang.Runnable
+            public final void run() {
+                this.f$0.lambda$makeRotateToast$0();
+            }
+        }, 3000L);
+    }
+
+    /* JADX INFO: Access modifiers changed from: private */
+    public /* synthetic */ void lambda$makeRotateToast$0() {
+        this.mToastPending = false;
+    }
+这是mixflip在使用外屏并横屏需要使用输入法时会弹出提示    <string name="ime_rotation_tip">当前角度不支持输入，请旋转后使用</string>
+public static final int ime_rotation_tip = 0x110f0453; 十进制：286196819。请解析其机制。已知mixflip外屏分辨率为1208x1392(底和高)，我理解在横屏时在原本DisplayCutout区域为左上角摄像头区域的Rect(0, 0 - 398, 728)加上摄像头下方的区域也就是说只有66%的区域达成正常手机比例，可我现在已经hook变成所有应用为always模式全屏显示了，这个限制就显得很傻逼了，因为不改的话横屏是用不了输入法的，hook使得变为always模式全屏有显示空间。这个怎么hook
+
+
+
+- miuisystemui.apk
+            -   systemui里的控制小组件的：
+                属性名miui.supportFlipWatchOverlayGroupView属性值默认不配置则显示小部件（默认值为true）
+                如果配置为false则隐藏小部件配置粒度支持Application + Activity。Activity优先
+                package com.android.notification.decor;
+                public final class DecorWindowManagerImpl
+                public final boolean shouldHideDecorWindow(ComponentName componentName) {
+                    String packageName = componentName.getPackageName();
+                    Object objCallObjectMethod = ReflectUtils.callObjectMethod(this.mPackageManager, "getProperty", new Class[]{String.class, ComponentName.class}, "miui.supportFlipWatchOverlayGroupView", componentName);
+                    if (objCallObjectMethod == null) {
+                        objCallObjectMethod = ReflectUtils.callObjectMethod(this.mPackageManager, "getProperty", new Class[]{String.class, String.class}, "miui.supportFlipWatchOverlayGroupView", packageName);
+                    }
+                    if (objCallObjectMethod != null) {
+                        if (ReflectUtils.callObjectMethod(objCallObjectMethod, "getBoolean", new Class[0], new Object[0]) instanceof Boolean) {
+                            return !((Boolean) r9).booleanValue();
+                        }
+                    }
+                    return false;
+                }
+
+
+package android.appcompat;
+
+import android.content.Context;
+import android.content.res.Configuration;
+import android.graphics.drawable.Animatable2;
+import android.graphics.drawable.AnimatedVectorDrawable;
+import android.graphics.drawable.Drawable;
+import android.miui.R;
+import android.os.RemoteException;
+import android.os.ServiceManager;
+import android.provider.Settings;
+import android.text.TextUtils;
+import android.util.AttributeSet;
+import android.util.Slog;
+import android.view.IWindowManager;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+/* JADX INFO: loaded from: classes.dex */
+public class FlipTipView extends LinearLayout {
+    private static final int LETTER_BOX_OUTER_HALF_REGION_WIDTH = 199;
+    private static final int LETTER_BOX_OUTER_REGION_WIDTH = 398;
+    private static final String TAG = "FlipTipView";
+    private final Animatable2.AnimationCallback mAnimationCallback;
+    private final int mAnimationHeight;
+    private final ImageView mAnimationView;
+    private final LinearLayout.LayoutParams mAnimationViewLayoutParams;
+    private final Context mContext;
+    private final int mInitDensity;
+    private final int mInitWidth;
+    private final LayoutInflater mLayoutInflater;
+    private final AnimatedVectorDrawable mSendingDrawable;
+    private final float mTextSize;
+    private final TextView mTextView;
+    private final LinearLayout mTipLayout;
+    private final View mTipView;
+    private final LinearLayout.LayoutParams mTipViewLayoutParams;
+    private final IWindowManager mWindowManager;
+    private final WindowManager mWm;
+
+    public FlipTipView(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        this.mContext = context;
+        this.mWm = (WindowManager) this.mContext.getSystemService("window");
+        this.mWindowManager = IWindowManager.Stub.asInterface(ServiceManager.getService("window"));
+        this.mLayoutInflater = LayoutInflater.from(context);
+        this.mTipView = this.mLayoutInflater.inflate(R.layout.continuity_intercept_dialog_layout, this);
+        this.mTipLayout = (LinearLayout) this.mTipView.findViewById(R.id.continuity_dialog);
+        this.mTextView = (TextView) this.mTipView.findViewById(R.id.start_activity_tip);
+        this.mTextView.setInputType(524288);
+        this.mAnimationView = (ImageView) this.mTipView.findViewById(R.id.openanimation);
+        this.mTipViewLayoutParams = (LinearLayout.LayoutParams) this.mTipLayout.getLayoutParams();
+        this.mAnimationViewLayoutParams = (LinearLayout.LayoutParams) this.mAnimationView.getLayoutParams();
+        this.mInitDensity = getForcedDensity(this.mContext.getUserId());
+        this.mInitWidth = this.mTipViewLayoutParams.width;
+        this.mAnimationHeight = this.mAnimationViewLayoutParams.height;
+        this.mTextSize = this.mTextView.getTextSize();
+        this.mSendingDrawable = (AnimatedVectorDrawable) this.mContext.getDrawable(R.drawable.openanimation);
+        this.mAnimationCallback = new Animatable2.AnimationCallback() { // from class: android.appcompat.FlipTipView.1
+            @Override // android.graphics.drawable.Animatable2.AnimationCallback
+            public void onAnimationEnd(Drawable drawable) {
+                super.onAnimationEnd(drawable);
+                FlipTipView.this.mSendingDrawable.setVisible(true, true);
+                try {
+                    FlipTipView.this.mSendingDrawable.forceAnimationOnUI();
+                } catch (Exception e) {
+                    Slog.e(FlipTipView.TAG, "forceAnimationOnUI catch some exception:", e);
+                }
+                FlipTipView.this.mSendingDrawable.start();
+            }
+        };
+        this.mTipLayout.getBackground().setAlpha(255);
+        this.mAnimationView.setImageDrawable(this.mSendingDrawable);
+        updateLocaleText();
+        try {
+            this.mSendingDrawable.forceAnimationOnUI();
+        } catch (Exception e) {
+            Slog.e(TAG, "forceAnimationOnUI catch some exception:", e);
+        }
+        this.mTipView.setSystemUiVisibility(4870);
+    }
+
+    public void show() {
+        fixRectWithConfiguration();
+        if (this.mTipView != null) {
+            this.mTipView.setVisibility(0);
+        }
+        if (this.mSendingDrawable != null) {
+            this.mSendingDrawable.clearAnimationCallbacks();
+            this.mSendingDrawable.registerAnimationCallback(this.mAnimationCallback);
+            if (this.mSendingDrawable.isRunning()) {
+                this.mSendingDrawable.stop();
+            } else {
+                try {
+                    this.mSendingDrawable.forceAnimationOnUI();
+                } catch (Exception e) {
+                    Slog.e(TAG, "forceAnimationOnUI catch some exception:", e);
+                }
+            }
+            this.mSendingDrawable.start();
+        }
+    }
+
+    public void hide() {
+        if (this.mSendingDrawable != null) {
+            this.mSendingDrawable.stop();
+            this.mSendingDrawable.setVisible(false, true);
+            this.mSendingDrawable.unregisterAnimationCallback(this.mAnimationCallback);
+        }
+        if (this.mTipView != null) {
+            this.mTipView.setVisibility(8);
+        }
+    }
+
+    @Override // android.view.View
+    protected void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        updateLocaleText();
+    }
+
+    private void fixRectWithConfiguration() {
+        float scale = getBaseDensity() / this.mInitDensity;
+        this.mTipViewLayoutParams.width = (int) (this.mInitWidth * scale);
+        this.mTipLayout.setLayoutParams(this.mTipViewLayoutParams);
+        this.mAnimationViewLayoutParams.height = (int) (this.mAnimationHeight * scale);
+        this.mAnimationView.setLayoutParams(this.mAnimationViewLayoutParams);
+        this.mTextView.setTextSize(0, this.mTextSize * scale);
+    }
+
+    private int getForcedDensity(int userId) {
+        String densityString = Settings.Secure.getStringForUser(this.mContext.getContentResolver(), "display_density_forced", userId);
+        if (TextUtils.isEmpty(densityString)) {
+            return getBaseDensity();
+        }
+        return Integer.valueOf(densityString).intValue();
+    }
+
+    private int getBaseDensity() {
+        try {
+            return this.mWindowManager.getBaseDisplayDensity(0);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+            return this.mContext.getResources().getConfiguration().densityDpi;
+        }
+    }
+
+    private void updateLocaleText() {
+        if (this.mTipView != null) {
+            this.mTextView.setText(R.string.start_activity_tip);
+            this.mTextView.setMaxLines(4);
+            if (this.mTextView.getLineCount() > 3) {
+                this.mTextView.setEllipsize(TextUtils.TruncateAt.END);
+            }
+        }
+    }
+}在miui-framework.jar中发现
