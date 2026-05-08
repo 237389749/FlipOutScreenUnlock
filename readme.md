@@ -1,7 +1,7 @@
 # MixFlip Full-Screen Fix Module
 
-**An LSPosed module that unlocks the full potential of the cover screen on foldable devices (e.g., Xiaomi MIX Flip).**  
-**一个 LSPosed 模块，用于释放折叠屏手机外屏的全部潜力（如 Xiaomi MIX Flip）。**
+**An LSPosed module that unlocks the full potential of the cover screen on foldable devices (e.g., Xiaomi MIX Flip/FLIP2).**  
+**一个 LSPosed 模块，用于释放折叠屏手机外屏的全部潜力（如 Xiaomi MIX Flip/FLIP2）。**
 
 ---
 
@@ -39,7 +39,7 @@
    重启设备。
 5. The fixes should take effect immediately after reboot.  
    重启后修复即刻生效。
-6. 如果不能安装请用mt管理器等授予root后安装，或在开发者选项打开usb安全设置
+6. 如果不能安装请用mt管理器等授予root后安装，或在开发者选项打开usb安全设置，limit_perf为降频模块
 ## Disclaimer / 免责声明
 This module is provided for educational and research purposes. Some implementations may be derived from decompiled code reference. Use at your own risk. The developer is not responsible for any damage or data loss.  
 本模块仅供学习和研究使用。部分实现可能参考了反编译代码。使用风险自负，开发者不承担任何责任。
