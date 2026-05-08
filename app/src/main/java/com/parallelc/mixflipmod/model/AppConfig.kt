@@ -149,6 +149,16 @@ private val flipHomeConfig = AppConfig(
     packageName = "com.miui.fliphome",
     prefs = listOf(
         PrefSpec.Switch(Prefs.FLIPHOME_NO_START_PAGE, R.string.pref_fliphome_no_start_page, R.string.pref_fliphome_no_start_page_summary),
+        PrefSpec.OptionSelect(
+            Prefs.FLIPHOME_RECENTS_STYLE,
+            R.string.pref_fliphome_recents_style,
+            defaultValue = OptionValue.IntVal(Prefs.RecentsLayoutStyle.DEFAULT.prefValue),
+            options = listOf(
+                PrefSpec.OptionSelect.Option(OptionValue.IntVal(Prefs.RecentsLayoutStyle.DEFAULT.prefValue), R.string.recents_style_default),
+                PrefSpec.OptionSelect.Option(OptionValue.IntVal(Prefs.RecentsLayoutStyle.VERTICAL.prefValue), R.string.recents_style_vertical),
+                PrefSpec.OptionSelect.Option(OptionValue.IntVal(Prefs.RecentsLayoutStyle.HORIZONTAL.prefValue), R.string.recents_style_horizontal),
+            ),
+        ),
     ),
 )
 

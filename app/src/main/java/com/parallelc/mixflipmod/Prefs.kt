@@ -18,6 +18,16 @@ object Prefs {
 
     // com.miui.fliphome
     const val FLIPHOME_NO_START_PAGE   = "fliphome_no_start_page"
+    const val FLIPHOME_RECENTS_STYLE   = "fliphome_recents_style"
+    enum class RecentsLayoutStyle(val prefValue: Int) {
+        DEFAULT(-1),
+        VERTICAL(0),
+        HORIZONTAL(1);
+
+        companion object {
+            fun fromPref(value: Int) = entries.firstOrNull { it.prefValue == value }
+        }
+    }
 
     // Per-app hide outer & dpi config
     const val HIDE_OUTER_PREFIX = "hide_outer_"
