@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">FullScreenUnlock</string>
+    <string name="module_description">Force fullscreen on outer display</string>
+</resources>
