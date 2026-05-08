@@ -1,0 +1,40 @@
+pluginManagement {
+    repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
+        mavenCentral()
+        gradlePluginPortal()
+        maven { url = "https://api.xposed.info/" }
+        maven { url = "https://maven.lsposed.org/" }
+        maven { url = "https://jitpack.io/" }
+        maven { url = "https://artifactory.appodeal.com/appodeal-public/" }
+        maven { url = "https://repo.grails.org/grails/core/" }
+        maven { url = "https://verve.jfrog.io/artifactory/verve-gradle-release/" }
+    }
+}
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = "https://api.xposed.info/" }
+        maven { url = "https://maven.lsposed.org/" }
+        maven { url = "https://jitpack.io/" }
+        maven { url = "https://artifactory.appodeal.com/appodeal-public/" }
+        maven { url = "https://repo.grails.org/grails/core/" }
+        maven { url = "https://verve.jfrog.io/artifactory/verve-gradle-release/" }
+
+
+    }
+}
+
+rootProject.name = "FullScreenUnlock"
+include ':app'
