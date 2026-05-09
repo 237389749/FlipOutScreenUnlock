@@ -159,6 +159,7 @@ private val flipHomeConfig = AppConfig(
                 PrefSpec.OptionSelect.Option(OptionValue.IntVal(Prefs.RecentsLayoutStyle.HORIZONTAL.prefValue), R.string.recents_style_horizontal),
             ),
         ),
+        PrefSpec.Switch(Prefs.FLIPHOME_RECENTS_LONG_PRESS_MENU, R.string.pref_fliphome_recents_long_press_menu, R.string.pref_fliphome_recents_long_press_menu_summary),
     ),
 )
 

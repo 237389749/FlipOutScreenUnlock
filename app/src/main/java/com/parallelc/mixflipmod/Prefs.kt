@@ -19,6 +19,7 @@ object Prefs {
     // com.miui.fliphome
     const val FLIPHOME_NO_START_PAGE   = "fliphome_no_start_page"
     const val FLIPHOME_RECENTS_STYLE   = "fliphome_recents_style"
+    const val FLIPHOME_RECENTS_LONG_PRESS_MENU = "fliphome_recents_long_press_menu"
     enum class RecentsLayoutStyle(val prefValue: Int) {
         DEFAULT(-1),
         VERTICAL(0),
