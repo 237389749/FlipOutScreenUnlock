@@ -30,7 +30,5 @@ object HideOuterHook : BaseHook() {
         hook(sp.method("getInt", String::class.java, Int::class.java)) { chain ->
             if (chain.args[0] == "persist.sys.multi_display_type") 1 else chain.proceed()
         }
-
-        if (param.packageName in AppDpiHook.targetPackages) AppDpiHook.hook(param)
     }
 }
