@@ -31,8 +31,9 @@
     <string name="pref_system_flip_continuity_summary">覆盖系统设置，所有应用合盖继续使用</string>
     <string name="pref_system_flip_ime_pkg">外屏输入法</string>
     <string name="ime_select_default">默认</string>
-    <string name="pref_flip_screen_mode">外屏应用缩放模式</string>
+    <string name="pref_flip_screen_mode">外屏应用渲染模式</string>
     <string name="flip_screen_mode_default">默认</string>
+    <string name="flip_screen_mode_full_screen">全屏</string>
     <string name="flip_screen_mode_no_scale">不缩放</string>
     <string name="flip_screen_mode_scale">缩放</string>
     <string name="search_apps">搜索应用</string>

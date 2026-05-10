@@ -3,6 +3,7 @@ package com.parallelc.mixflipmod.ui.screen
 import android.content.SharedPreferences
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,9 +36,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
+import kotlin.math.roundToInt
 import com.parallelc.mixflipmod.Prefs
 import com.parallelc.mixflipmod.Prefs.FlipScreenMode
 import com.parallelc.mixflipmod.R
@@ -57,6 +62,8 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Slider
+import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
@@ -186,6 +193,7 @@ fun FlipScreenModeScreen(
                             FlipScreenModeAppItem(
                                 app = app,
                                 mode = FlipScreenMode.fromPref(prefs.getInt(Prefs.flipScreenModeKey(app.packageName), FlipScreenMode.DEFAULT.prefValue)) ?: FlipScreenMode.DEFAULT,
+                                scale = prefs.getFloat(Prefs.flipScreenScaleKey(app.packageName), Prefs.DEFAULT_FLIP_SCREEN_SCALE),
                                 onModeSelected = { mode ->
                                     prefs.edit {
                                         val key = Prefs.flipScreenModeKey(app.packageName)
@@ -193,6 +201,9 @@ fun FlipScreenModeScreen(
                                     }
                                     runCatching { checkScope(XposedServiceState.service, "system", true) }
                                     modeVersion++
+                                },
+                                onScaleChanged = { scale ->
+                                    prefs.edit { putFloat(Prefs.flipScreenScaleKey(app.packageName), scale) }
                                 },
                             )
                         }
@@ -207,75 +218,108 @@ fun FlipScreenModeScreen(
 private fun FlipScreenModeAppItem(
     app: InstalledApp,
     mode: FlipScreenMode,
+    scale: Float,
     onModeSelected: (FlipScreenMode) -> Unit,
+    onScaleChanged: (Float) -> Unit,
 ) {
     val pm = LocalContext.current.packageManager
     var showDropdown by remember { mutableStateOf(false) }
+    val isScaleMode = mode == FlipScreenMode.SCALE
+    val currentScale = remember(app.packageName, scale) { mutableFloatStateOf(scale) }
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        BasicComponent(
-            startAction = {
-                AppIcon(icon = app.appInfo, pm = pm, modifier = Modifier.padding(end = 8.dp).size(36.dp))
-            },
-            endActions = {
-                Box {
-                    OverlayListPopup(
-                        show = showDropdown,
-                        alignment = PopupPositionProvider.Align.End,
-                        onDismissRequest = { showDropdown = false },
-                    ) {
-                        ListPopupColumn {
-                            flipScreenModeOptions().forEachIndexed { index, (optionMode, label) ->
-                                DropdownImpl(
-                                    text = label,
-                                    optionSize = FLIP_SCREEN_MODE_OPTION_COUNT,
-                                    isSelected = optionMode == mode,
-                                    index = index,
-                                    onSelectedIndexChange = {
-                                        onModeSelected(optionMode)
-                                        showDropdown = false
-                                    },
-                                )
+        Column {
+            BasicComponent(
+                startAction = {
+                    AppIcon(icon = app.appInfo, pm = pm, modifier = Modifier.padding(end = 8.dp).size(36.dp))
+                },
+                endActions = {
+                    Box {
+                        OverlayListPopup(
+                            show = showDropdown,
+                            alignment = PopupPositionProvider.Align.End,
+                            onDismissRequest = { showDropdown = false },
+                        ) {
+                            ListPopupColumn {
+                                flipScreenModeOptions().forEachIndexed { index, (optionMode, label) ->
+                                    DropdownImpl(
+                                        text = label,
+                                        optionSize = FLIP_SCREEN_MODE_OPTION_COUNT,
+                                        isSelected = optionMode == mode,
+                                        index = index,
+                                        onSelectedIndexChange = {
+                                            onModeSelected(optionMode)
+                                            showDropdown = false
+                                        },
+                                    )
+                                }
                             }
                         }
+                        Row(
+                            modifier = Modifier.clickable { showDropdown = true },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = flipScreenModeLabel(mode),
+                                color = if (mode == FlipScreenMode.DEFAULT) {
+                                    colorScheme.onSurfaceVariantSummary
+                                } else {
+                                    colorScheme.primary
+                                },
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Spacer(Modifier.size(8.dp))
+                            DropdownArrowEndAction(actionColor = colorScheme.onSurfaceVariantActions)
+                        }
                     }
-                    Row(
-                        modifier = Modifier.clickable { showDropdown = true },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = flipScreenModeLabel(mode),
-                            color = if (mode == FlipScreenMode.DEFAULT) {
-                                colorScheme.onSurfaceVariantSummary
-                            } else {
-                                colorScheme.primary
-                            },
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Spacer(Modifier.size(8.dp))
-                        DropdownArrowEndAction(actionColor = colorScheme.onSurfaceVariantActions)
-                    }
+                },
+                holdDownState = showDropdown,
+            ) {
+                Text(
+                    text = app.label,
+                    modifier = Modifier.basicMarquee(),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colorScheme.onBackground,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                Text(
+                    text = app.packageName,
+                    modifier = Modifier.basicMarquee(),
+                    fontSize = 12.sp,
+                    color = colorScheme.onSurfaceVariantSummary,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+            if (isScaleMode) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Slider(
+                        value = currentScale.floatValue,
+                        onValueChange = {
+                            currentScale.floatValue = it
+                            onScaleChanged(it)
+                        },
+                        valueRange = Prefs.FLIP_SCREEN_SCALE_MIN..Prefs.FLIP_SCREEN_SCALE_MAX,
+                        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "${(currentScale.floatValue * 100).roundToInt()}%",
+                        modifier = Modifier.width(40.dp),
+                        color = colorScheme.onSurfaceVariantSummary,
+                        textAlign = TextAlign.End,
+                        fontSize = 13.sp,
+                    )
                 }
-            },
-            holdDownState = showDropdown,
-        ) {
-            Text(
-                text = app.label,
-                modifier = Modifier.basicMarquee(),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = colorScheme.onBackground,
-                maxLines = 1,
-                softWrap = false,
-            )
-            Text(
-                text = app.packageName,
-                modifier = Modifier.basicMarquee(),
-                fontSize = 12.sp,
-                color = colorScheme.onSurfaceVariantSummary,
-                maxLines = 1,
-                softWrap = false,
-            )
+            }
         }
     }
 }
@@ -306,6 +350,7 @@ private fun flipScreenModeOptions(): List<Pair<FlipScreenMode, String>> {
 @Composable
 private fun flipScreenModeLabel(mode: FlipScreenMode): String {
     return when (mode) {
+        FlipScreenMode.FULL_SCREEN -> stringResource(R.string.flip_screen_mode_full_screen)
         FlipScreenMode.NO_SCALE -> stringResource(R.string.flip_screen_mode_no_scale)
         FlipScreenMode.SCALE -> stringResource(R.string.flip_screen_mode_scale)
         else -> stringResource(R.string.flip_screen_mode_default)

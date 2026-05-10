@@ -31,13 +31,13 @@ object Prefs {
         }
     }
 
-    // Per-app hide outer & dpi config
+    // Per-app hide outer
     const val HIDE_OUTER_PREFIX = "hide_outer_"
-    const val HIDE_OUTER_DPI = 340
     fun hideOuterKey(pkg: String) = "$HIDE_OUTER_PREFIX$pkg"
 
     enum class FlipScreenMode(val prefValue: Int) {
         DEFAULT(-1),
+        FULL_SCREEN(0),
         NO_SCALE(1),
         SCALE(2);
 
@@ -45,8 +45,16 @@ object Prefs {
             fun fromPref(value: Int) = entries.firstOrNull { it.prefValue == value }
         }
     }
-    private const val FLIP_SCREEN_MODE_PREFIX = "flip_screen_mode_"
+    const val FLIP_SCREEN_MODE_PREFIX = "flip_screen_mode_"
     fun flipScreenModeKey(pkg: String) = "$FLIP_SCREEN_MODE_PREFIX$pkg"
+    fun flipScreenModePackage(key: String) = key.removePrefix(FLIP_SCREEN_MODE_PREFIX)
+
+    const val FLIP_SCREEN_SCALE_PREFIX = "flip_screen_scale_"
+    const val FLIP_SCREEN_SCALE_MIN = 0.01f
+    const val FLIP_SCREEN_SCALE_MAX = 1.0f
+    const val DEFAULT_FLIP_SCREEN_SCALE = 0.8f
+    fun flipScreenScaleKey(pkg: String) = "$FLIP_SCREEN_SCALE_PREFIX$pkg"
+    fun flipScreenScalePackage(key: String) = key.removePrefix(FLIP_SCREEN_SCALE_PREFIX)
 
     const val DEFAULT_FLIP_IME_PKG = "com.sohu.inputmethod.sogou.xiaomi"
 }
