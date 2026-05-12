@@ -14,6 +14,7 @@ import com.parallelc.mixflipmod.hook.util.field
 import com.parallelc.mixflipmod.hook.util.findClass
 import com.parallelc.mixflipmod.hook.util.getField
 import com.parallelc.mixflipmod.hook.util.hook
+import com.parallelc.mixflipmod.hook.util.log
 import com.parallelc.mixflipmod.hook.util.method
 import com.parallelc.mixflipmod.hook.util.prefInt
 import com.parallelc.mixflipmod.hook.util.replaceResult
@@ -68,87 +69,89 @@ object SystemUIHook : BaseHook() {
                 val pluginLoader = (result as? ContextWrapper)?.classLoader ?: return result
                 isHooked = true
 
-                val styleClass = pluginLoader.loadClass($$"miui.systemui.controlcenter.panel.main.MainPanelController$Style")
-                val compactStyle = styleClass.field("COMPACT").get(null)
-                val verticalStyle = styleClass.field("VERTICAL").get(null)
+                runCatching {
+                    val styleClass = pluginLoader.loadClass($$"miui.systemui.controlcenter.panel.main.MainPanelController$Style")
+                    val compactStyle = styleClass.field("COMPACT").get(null)
+                    val verticalStyle = styleClass.field("VERTICAL").get(null)
 
-                val panelClass = pluginLoader.loadClass("miui.systemui.controlcenter.panel.main.MainPanelStyleController")
-                hook(panelClass.method("set_style", styleClass)) { styleChain ->
-                    isTinyScreen = styleChain.args[0] == compactStyle
-                    styleChain.proceed()
-                }
+                    val panelClass = pluginLoader.loadClass("miui.systemui.controlcenter.panel.main.MainPanelStyleController")
+                    hook(panelClass.method("set_style", styleClass)) { styleChain ->
+                        isTinyScreen = styleChain.args[0] == compactStyle
+                        styleChain.proceed()
+                    }
 
-                class HookGetStyle : Hooker {
-                    override fun intercept(chain: Chain): Any? {
-                        val handle = hook(panelClass.method("getStyle")) { getStyleChain ->
-                            if (isTinyScreen) verticalStyle else getStyleChain.proceed()
+                    class HookGetStyle : Hooker {
+                        override fun intercept(chain: Chain): Any? {
+                            val handle = hook(panelClass.method("getStyle")) { getStyleChain ->
+                                if (isTinyScreen) verticalStyle else getStyleChain.proceed()
+                            }
+                            return runWithCleanup({ handle.unhook() }) { chain.proceed() }
                         }
-                        return runWithCleanup({ handle.unhook() }) { chain.proceed() }
                     }
-                }
 
-                listOf(
-                    "miui.systemui.controlcenter.panel.main.qs.EditButtonController",
-                    "miui.systemui.controlcenter.panel.main.qs.QSListController",
-                    "miui.systemui.controlcenter.panel.main.qs.CompactQSListController",
-                    "miui.systemui.controlcenter.panel.main.devicecenter.entry.DeviceCenterEntryController",
-                    "miui.systemui.controlcenter.panel.main.devicecontrol.DeviceControlsEntryController",
-                ).forEach { cls ->
-                    hook(pluginLoader.loadClass(cls).method("available", Boolean::class.java), HookGetStyle())
-                }
-
-                hook(pluginLoader.loadClass("miui.systemui.controlcenter.qs.tileview.QSTileItemView").method("onFinishInflate"), after { tileChain, tileResult ->
-                    (tileChain.thisObject as? FrameLayout)?.setOnLongClickListener { v ->
-                        tileChain.thisObject
-                            ?.getField("longClickAction")
-                            ?.let { it.callMethod("invoke", v) as? Boolean }
-                            ?: false
+                    listOf(
+                        "miui.systemui.controlcenter.panel.main.qs.EditButtonController",
+                        "miui.systemui.controlcenter.panel.main.qs.QSListController",
+                        "miui.systemui.controlcenter.panel.main.qs.CompactQSListController",
+                        "miui.systemui.controlcenter.panel.main.devicecenter.entry.DeviceCenterEntryController",
+                        "miui.systemui.controlcenter.panel.main.devicecontrol.DeviceControlsEntryController",
+                    ).forEach { cls ->
+                        hook(pluginLoader.loadClass(cls).method("available", Boolean::class.java), HookGetStyle())
                     }
-                    tileResult
-                })
 
-                val rdimenClass = pluginLoader.loadClass($$"miui.systemui.controlcenter.R$dimen")
-                hook(Resources::class.java.method("getDimensionPixelSize", Int::class.java), after { dimenChain, dimenResult ->
-                    if (isTinyScreen && dimenChain.args[0] == rdimenClass.field("device_center_device_item_width").getInt(null)) 245 else dimenResult
-                })
+                    hook(pluginLoader.loadClass("miui.systemui.controlcenter.qs.tileview.QSTileItemView").method("onFinishInflate"), after { tileChain, tileResult ->
+                        (tileChain.thisObject as? FrameLayout)?.setOnLongClickListener { v ->
+                            tileChain.thisObject
+                                ?.getField("longClickAction")
+                                ?.let { it.callMethod("invoke", v) as? Boolean }
+                                ?: false
+                        }
+                        tileResult
+                    })
 
-                hook(
-                    pluginLoader.loadClass($$"miui.systemui.controlcenter.panel.main.devicecenter.devices.DeviceCenterCardController$_adapter$1")
-                        .method("onCreateViewHolder", ViewGroup::class.java, Int::class.java),
-                    after { _, holderResult ->
-                        (holderResult?.getField("itemView") as? View)
-                            ?.takeIf { isTinyScreen && it.layoutParams.width != -1 }
-                            ?.let { it.layoutParams.width = 245 }
-                        holderResult
-                    }
-                )
+                    val rdimenClass = pluginLoader.loadClass($$"miui.systemui.controlcenter.R$dimen")
+                    hook(Resources::class.java.method("getDimensionPixelSize", Int::class.java), after { dimenChain, dimenResult ->
+                        if (isTinyScreen && dimenChain.args[0] == rdimenClass.field("device_center_device_item_width").getInt(null)) 245 else dimenResult
+                    })
 
-                val modeClass = pluginLoader.loadClass($$"miui.systemui.controlcenter.panel.main.devicecenter.entry.DeviceCenterEntryViewHolder$Mode")
-                val modeCollapsed = modeClass.field("MODE_COLLAPSED").get(null)
-                val mode1row = modeClass.field("MODE_1_ROW").get(null)
-                val mode2row = modeClass.field("MODE_2_ROWS").get(null)
+                    hook(
+                        pluginLoader.loadClass($$"miui.systemui.controlcenter.panel.main.devicecenter.devices.DeviceCenterCardController$_adapter$1")
+                            .method("onCreateViewHolder", ViewGroup::class.java, Int::class.java),
+                        after { _, holderResult ->
+                            (holderResult?.getField("itemView") as? View)
+                                ?.takeIf { isTinyScreen && it.layoutParams.width != -1 }
+                                ?.let { it.layoutParams.width = 245 }
+                            holderResult
+                        }
+                    )
 
-                hook(pluginLoader.loadClass("miui.systemui.controlcenter.panel.main.devicecenter.devices.DeviceCenterCardController").method("getMode"), Hooker { modeChain ->
-                    if (!isTinyScreen) return@Hooker modeChain.proceed()
-                    val size = (modeChain.thisObject?.getField("deviceItems") as? ArrayList<*>)?.size ?: return@Hooker modeChain.proceed()
-                    when {
-                        size == 1 -> modeCollapsed
-                        size < 4 -> mode1row
-                        else -> mode2row
-                    }
-                })
+                    val modeClass = pluginLoader.loadClass($$"miui.systemui.controlcenter.panel.main.devicecenter.entry.DeviceCenterEntryViewHolder$Mode")
+                    val modeCollapsed = modeClass.field("MODE_COLLAPSED").get(null)
+                    val mode1row = modeClass.field("MODE_1_ROW").get(null)
+                    val mode2row = modeClass.field("MODE_2_ROWS").get(null)
 
-                hook(
-                    pluginLoader.loadClass("miui.systemui.devicecenter.DeviceCenterController")
-                        .method("handleDeviceListUpdate", Boolean::class.java),
-                    Hooker { deviceChain ->
-                        if (!isTinyScreen) return@Hooker deviceChain.proceed()
-                        val deviceList = deviceChain.thisObject?.getField("deviceList") as? ArrayList<*> ?: return@Hooker deviceChain.proceed()
-                        if (deviceList.size <= 5) return@Hooker deviceChain.proceed()
-                        deviceChain.thisObject?.setField("deviceList", deviceList.subList(0, 5).toList())
-                        runWithCleanup({ deviceChain.thisObject?.setField("deviceList", deviceList) }) { deviceChain.proceed() }
-                    }
-                )
+                    hook(pluginLoader.loadClass("miui.systemui.controlcenter.panel.main.devicecenter.devices.DeviceCenterCardController").method("getMode"), Hooker { modeChain ->
+                        if (!isTinyScreen) return@Hooker modeChain.proceed()
+                        val size = (modeChain.thisObject?.getField("deviceItems") as? ArrayList<*>)?.size ?: return@Hooker modeChain.proceed()
+                        when {
+                            size == 1 -> modeCollapsed
+                            size < 4 -> mode1row
+                            else -> mode2row
+                        }
+                    })
+
+                    hook(
+                        pluginLoader.loadClass("miui.systemui.devicecenter.DeviceCenterController")
+                            .method("handleDeviceListUpdate", Boolean::class.java),
+                        Hooker { deviceChain ->
+                            if (!isTinyScreen) return@Hooker deviceChain.proceed()
+                            val deviceList = deviceChain.thisObject?.getField("deviceList") as? ArrayList<*> ?: return@Hooker deviceChain.proceed()
+                            if (deviceList.size <= 5) return@Hooker deviceChain.proceed()
+                            deviceChain.thisObject?.setField("deviceList", deviceList.subList(0, 5).toList())
+                            runWithCleanup({ deviceChain.thisObject?.setField("deviceList", deviceList) }) { deviceChain.proceed() }
+                        }
+                    )
+                }.onFailure { log("hookControlCenter plugin init failed", it) }
                 return result
             }
         })

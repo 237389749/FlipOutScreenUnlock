@@ -17,6 +17,7 @@ import com.parallelc.mixflipmod.hook.util.createDexKitBridge
 import com.parallelc.mixflipmod.hook.util.findClass
 import com.parallelc.mixflipmod.hook.util.getField
 import com.parallelc.mixflipmod.hook.util.hook
+import com.parallelc.mixflipmod.hook.util.log
 import com.parallelc.mixflipmod.hook.util.method
 import com.parallelc.mixflipmod.hook.util.safeHook
 import com.parallelc.mixflipmod.module
@@ -207,12 +208,15 @@ object SystemHook {
                 flipScreenModeFor(packageName) == FlipScreenMode.FULL_SCREEN
             ) {
                 val className = chain.args[2] as? String
-                propertyClass
-                    .getDeclaredConstructor(
-                        String::class.java, Boolean::class.javaPrimitiveType!!, String::class.java, String::class.java
-                    )
-                    .also { it.isAccessible = true }
-                    .newInstance(propertyName, false, packageName, className)
+                runCatching {
+                    propertyClass
+                        .getDeclaredConstructor(
+                            String::class.java, Boolean::class.javaPrimitiveType!!, String::class.java, String::class.java
+                        )
+                        .also { it.isAccessible = true }
+                        .newInstance(propertyName, false, packageName, className)
+                }.onFailure { log("getPropertyAsUser hook failed", it) }
+                    .getOrElse { chain.proceed() }
             } else {
                 chain.proceed()
             }
@@ -330,7 +334,7 @@ object SystemHook {
             if (current != methodId) {
                 putStringForUser.invoke(null, resolver, DEFAULT_INPUT_METHOD, methodId, userId)
             }
-        }
+        }.onFailure { log("syncFlipInputMethodIfFolded failed", it) }
     }
 
     private fun inputMethodIdForPackage(packageName: String, userId: Int): String? {
