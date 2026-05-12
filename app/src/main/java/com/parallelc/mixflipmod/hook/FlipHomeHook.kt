@@ -28,6 +28,7 @@ import com.parallelc.mixflipmod.hook.util.callMethod
 import com.parallelc.mixflipmod.hook.util.findClass
 import com.parallelc.mixflipmod.hook.util.getField
 import com.parallelc.mixflipmod.hook.util.hook
+import com.parallelc.mixflipmod.hook.util.log
 import com.parallelc.mixflipmod.hook.util.method
 import com.parallelc.mixflipmod.hook.util.prefInt
 import com.parallelc.mixflipmod.hook.util.replaceResult
@@ -183,7 +184,9 @@ object FlipHomeHook : BaseHook() {
             val taskView = chain.thisObject as? View ?: return@after result
             taskView.isLongClickable = true
             taskView.setOnLongClickListener {
-                val task = runCatching { taskView.callMethod("getTask") }.getOrNull()
+                val task = runCatching { taskView.callMethod("getTask") }
+                    .onFailure { log("getTask failed", it) }
+                    .getOrNull()
                     ?: return@setOnLongClickListener false
                 runCatching {
                     val packageName = task.packageName() ?: return@runCatching
@@ -193,7 +196,7 @@ object FlipHomeHook : BaseHook() {
                     } else {
                         showRecentsTaskMenu(taskView, task, packageName, lockOrUnlockApp)
                     }
-                }
+                }.onFailure { log("recents long press menu failed", it) }
                 true
             }
             result
@@ -272,8 +275,9 @@ object FlipHomeHook : BaseHook() {
             val holderPosition = shortcutMenu.callMethod("getHolderPosition") as? Int ?: -1
             fragment.getField("mAppPresenter")?.callMethod("removeApp", shortcut)
             fragment.getField("mAdapter")?.callMethod("onDeleteAppItem", holderPosition, shortcut)
-        }
+        }.onFailure { log("removeNativeAppShortcut failed", it) }
         runCatching { fragment.callMethod("hideShortcutMenu") }
+            .onFailure { log("hideShortcutMenu failed", it) }
     }
 
     private fun prepareNativeAppShortcutMenu(shortcutMenu: LinearLayout): LinearLayout? {
@@ -788,9 +792,9 @@ object FlipHomeHook : BaseHook() {
                 runCatching {
                     taskView.callMethod("getHeaderView")?.callMethod("showOrHideLockImageView", toLock)
                     taskView.performHapticFeedback(1)
-                }
+                }.onFailure { log("toggleTaskLock callback failed", it) }
             })
-        }
+        }.onFailure { log("toggleTaskLock failed", it) }
     }
 
     private fun Any.packageName(): String? {
