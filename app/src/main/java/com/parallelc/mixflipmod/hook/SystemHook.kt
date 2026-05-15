@@ -1,13 +1,14 @@
 package com.parallelc.mixflipmod.hook
 
 import android.content.ComponentName
+import android.graphics.Rect
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
-import android.provider.Settings
 import android.os.Bundle
+import android.provider.Settings
 import android.view.WindowManager
 import com.parallelc.mixflipmod.Prefs
 import com.parallelc.mixflipmod.Prefs.FlipScreenMode
@@ -19,6 +20,7 @@ import com.parallelc.mixflipmod.hook.util.getField
 import com.parallelc.mixflipmod.hook.util.hook
 import com.parallelc.mixflipmod.hook.util.log
 import com.parallelc.mixflipmod.hook.util.method
+import com.parallelc.mixflipmod.hook.util.runWithCleanup
 import com.parallelc.mixflipmod.hook.util.safeHook
 import com.parallelc.mixflipmod.module
 import io.github.libxposed.api.XposedInterface.Hooker
@@ -178,18 +180,6 @@ object SystemHook {
                 else -> result
             }
         })
-        hook(windowLayout.method("getLayoutInDisplayCutoutMode", WindowManager.LayoutParams::class.java)) { chain ->
-            if (!isFlipFolded()) return@hook chain.proceed()
-            val attrs = chain.args[0] as? WindowManager.LayoutParams
-            val packageName = attrs?.packageName
-            val mode = packageName?.let { flipScreenModeFor(it) }
-            val result = chain.proceed()
-            if (packageName != null && mode != null && mode != FlipScreenMode.DEFAULT) {
-                if (mode == FlipScreenMode.FULL_SCREEN) LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS else result
-            } else {
-                result
-            }
-        }
 
         val propertyClass = param.classLoader.findClass($$"android.content.pm.PackageManager$Property")
         hook(
@@ -220,6 +210,82 @@ object SystemHook {
             } else {
                 chain.proceed()
             }
+        }
+
+        hook(windowLayout.method("getLayoutInDisplayCutoutMode", WindowManager.LayoutParams::class.java)) { chain ->
+            if (!isFlipFolded()) return@hook chain.proceed()
+            val attrs = chain.args[0] as? WindowManager.LayoutParams
+            val packageName = attrs?.packageName ?: return@hook chain.proceed()
+            if (flipScreenModeFor(packageName) != FlipScreenMode.FULL_SCREEN) return@hook chain.proceed()
+            LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
+
+        val displayCutout = param.classLoader.findClass("android.view.DisplayCutout")
+        val windowInsetsType = param.classLoader.findClass($$"android.view.WindowInsets$Type")
+        val noDisplayCutout = displayCutout.getDeclaredField("NO_CUTOUT").also { it.isAccessible = true }.get(null)
+        val displayCutoutType = windowInsetsType.method("displayCutout").invoke(null) as? Int ?: 0
+
+        // Remove display cutout from InsetsState. fillInsetsState feeds both sync paths
+        // (addWindowInner / relayoutWindow) and async paths (reportResized / notifyInsetsControlChanged).
+        val windowState = param.classLoader.findClass("com.android.server.wm.WindowState")
+        val insetsStateClass = param.classLoader.findClass("android.view.InsetsState")
+        hook(windowState.method("fillInsetsState", insetsStateClass, Boolean::class.javaPrimitiveType!!), after { chain, _ ->
+            if (!isFlipFolded()) return@after null
+            val packageName = chain.thisObject?.callMethod("getOwningPackage") as? String ?: return@after null
+            if (flipScreenModeFor(packageName) != FlipScreenMode.FULL_SCREEN) return@after null
+            val state = chain.args[0]
+            noDisplayCutout?.let { state.callMethod("setDisplayCutout", it) }
+            for (i in (state.callMethod("sourceSize") as? Int ?: 0) - 1 downTo 0) {
+                val source = state.callMethod("sourceAt", i) ?: continue
+                if (source.callMethod("getType") as? Int == displayCutoutType) {
+                    state.callMethod("removeSourceAt", i)
+                }
+            }
+        })
+
+        // Fix appBounds in LaunchActivityItem (cold start). Both fields are owned by the item.
+        val launchActivityItemClass = param.classLoader.findClass("android.app.servertransaction.LaunchActivityItem")
+        hook(launchActivityItemClass.constructors.first { it.parameterCount > 10 }, after { chain, _ ->
+            if (!isFlipFolded()) return@after null
+            val info = chain.thisObject?.getField("mInfo") as? ActivityInfo ?: return@after null
+            val packageName = info.packageName ?: return@after null
+            if (flipScreenModeFor(packageName) != FlipScreenMode.FULL_SCREEN) return@after null
+            val overrideConfig = chain.thisObject?.getField("mOverrideConfig") ?: return@after null
+            fixConfigurationAppBounds(overrideConfig)
+            chain.thisObject?.getField("mCurConfig")?.let { fixConfigurationAppBounds(it) }
+        })
+
+        val activityWindowInfoClass = param.classLoader.findClass("android.window.ActivityWindowInfo")
+
+        // Fix appBounds for per-activity config updates. args[0] is mMergedOverrideConfiguration —
+        // a persistent system field, so restore original appBounds after proceed() to avoid pollution.
+        hook(activityRecord.method("scheduleConfigurationChanged", Configuration::class.java, activityWindowInfoClass)) { chain ->
+            if (!isFlipFolded()) return@hook chain.proceed()
+            val packageName = activityPackageName(chain.thisObject) ?: return@hook chain.proceed()
+            if (flipScreenModeFor(packageName) != FlipScreenMode.FULL_SCREEN) return@hook chain.proceed()
+            val windowConfig = runCatching { chain.args[0].getField("windowConfiguration") }.getOrNull()
+            val originalAppBounds = (windowConfig?.callMethod("getAppBounds") as? Rect)?.let { Rect(it) }
+            val bounds = windowConfig?.callMethod("getBounds") as? Rect
+            if (bounds != null && !bounds.isEmpty) windowConfig.callMethod("setAppBounds", bounds)
+            runWithCleanup({ windowConfig?.callMethod("setAppBounds", originalAppBounds) }) {
+                chain.proceed()
+            }
+        }
+
+        // Fix appBounds in ConfigurationChangeItem (process-global config). mConfiguration is a copy.
+        val windowProcessController = param.classLoader.findClass("com.android.server.wm.WindowProcessController")
+        val iApplicationThread = param.classLoader.findClass("android.app.IApplicationThread")
+        val clientTransactionItem = param.classLoader.findClass("android.app.servertransaction.ClientTransactionItem")
+        val configurationChangeItemClass = param.classLoader.findClass("android.app.servertransaction.ConfigurationChangeItem")
+        hook(windowProcessController.method("scheduleClientTransactionItem", iApplicationThread, clientTransactionItem)) { chain ->
+            if (!isFlipFolded()) return@hook chain.proceed()
+            val item = chain.args[1] ?: return@hook chain.proceed()
+            if (!configurationChangeItemClass.isInstance(item)) return@hook chain.proceed()
+            val pkgList = runCatching { chain.thisObject?.getField("mPkgList") as? List<*> }.getOrNull()
+            val packages = pkgList?.filterIsInstance<String>() ?: return@hook chain.proceed()
+            if (packages.none { flipScreenModeFor(it) == FlipScreenMode.FULL_SCREEN }) return@hook chain.proceed()
+            item.getField("mConfiguration")?.let { fixConfigurationAppBounds(it) }
+            chain.proceed()
         }
     }
 
@@ -346,6 +412,17 @@ object SystemHook {
             val id = methodId as? String ?: return@firstNotNullOfOrNull null
             val imePackageName = imi?.callMethod("getPackageName") as? String
             if (imePackageName == packageName) id else null
+        }
+    }
+
+    private fun fixConfigurationAppBounds(configuration: Any?) {
+        val config = configuration ?: return
+        runCatching {
+            val windowConfiguration = config.getField("windowConfiguration") ?: return@runCatching
+            val bounds = windowConfiguration.callMethod("getBounds") as? Rect
+            if (bounds != null && !bounds.isEmpty) {
+                windowConfiguration.callMethod("setAppBounds", bounds)
+            }
         }
     }
 
