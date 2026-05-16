@@ -1,13 +1,13 @@
 package com.parallelc.mixflipmod.hook
 
 import com.parallelc.mixflipmod.Prefs
+import com.parallelc.mixflipmod.hook.util.HookScope
 import com.parallelc.mixflipmod.hook.util.createDexKitBridge
+import com.parallelc.mixflipmod.hook.util.hookScope
 import com.parallelc.mixflipmod.hook.util.findClass
 import com.parallelc.mixflipmod.hook.util.hook
 import com.parallelc.mixflipmod.hook.util.log
 import com.parallelc.mixflipmod.hook.util.method
-import com.parallelc.mixflipmod.hook.util.replaceResult
-import com.parallelc.mixflipmod.hook.util.runWithCleanup
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import org.luckypray.dexkit.DexKitBridge
 import java.lang.reflect.Method
@@ -45,6 +45,7 @@ object SogouHook : BaseHook() {
         createDexKitBridge(param.classLoader).use { bridge ->
             val managerClass = findManagerClass(bridge, param.classLoader)
             val isFlipScreen = findIsFlipScreen(bridge, param.classLoader, managerClass)
+            val fakeFlipScreen = hookScope(isFlipScreen) { false }
 
             val buildFunctionList = bridge.findMethod {
                 matcher {
@@ -60,7 +61,7 @@ object SogouHook : BaseHook() {
                 Modifier.isStatic(m.modifiers) && m.returnType == managerClass && m.parameterCount == 0
             } ?: error("getSingleton not found")
 
-            hookWithFakeFlipScreen(buildFunctionList, isFlipScreen) { result ->
+            hookWithFakeFlipScreen(buildFunctionList, fakeFlipScreen) { result ->
                 runCatching {
                     if (isFlipScreen.invoke(getSingleton.invoke(null)) as Boolean) {
                         @Suppress("UNCHECKED_CAST")
@@ -86,7 +87,7 @@ object SogouHook : BaseHook() {
             }.singleOrNull()?.getMethodInstance(param.classLoader)
                 ?: error("refreshFunctionList not found")
 
-            hookWithFakeFlipScreen(refreshFunctionList, isFlipScreen)
+            hookWithFakeFlipScreen(refreshFunctionList, fakeFlipScreen)
         }
     }
 
@@ -105,17 +106,11 @@ object SogouHook : BaseHook() {
                 ?: error("onCandidateChange not found")
 
             val containerClass = param.classLoader.findClass("com.sohu.inputmethod.main.view.IMEInputCandidateViewContainer")
-            val showClipboardFirstCandidate = containerClass.method("showClipboardFirstCandidate")
 
+            val fakeFlipScreenUntilClipboardCandidate = hookScope(isFlipScreen) { false }
+                .stopOn(containerClass.method("showClipboardFirstCandidate"))
             hook(onCandidateChange) { chain ->
-                val isFlipScreenHandle = hook(isFlipScreen, replaceResult(false))
-                val restoreHandle = hook(showClipboardFirstCandidate) { innerChain ->
-                    isFlipScreenHandle.unhook()
-                    innerChain.proceed()
-                }
-                runWithCleanup({ isFlipScreenHandle.unhook(); restoreHandle.unhook() }) {
-                    chain.proceed()
-                }
+                fakeFlipScreenUntilClipboardCandidate.run { chain.proceed() }
             }
 
             val showFunctionOrClipboard = bridge.findMethod {
@@ -133,29 +128,21 @@ object SogouHook : BaseHook() {
                     Modifier.isPublic(it.modifiers) && !Modifier.isStatic(it.modifiers)
             } ?: error("showFunctionOrClipboard not found")
 
-            val showIMEFunctionOrFirstClipboardView = containerClass.method("showIMEFunctionOrFirstClipboardView")
-
+            val fakeFlipScreenUntilFunctionOrClipboard = hookScope(isFlipScreen) { false }
+                .stopOn(containerClass.method("showIMEFunctionOrFirstClipboardView"))
             hook(showFunctionOrClipboard) { chain ->
-                val isFlipScreenHandle = hook(isFlipScreen, replaceResult(false))
-                val restoreHandle = hook(showIMEFunctionOrFirstClipboardView) { innerChain ->
-                    isFlipScreenHandle.unhook()
-                    innerChain.proceed()
-                }
-                runWithCleanup({ isFlipScreenHandle.unhook(); restoreHandle.unhook() }) {
-                    chain.proceed()
-                }
+                fakeFlipScreenUntilFunctionOrClipboard.run { chain.proceed() }
             }
         }
     }
 
     private fun hookWithFakeFlipScreen(
         target: Method,
-        isFlipScreen: Method,
+        fakeFlipScreen: HookScope,
         after: ((Any?) -> Any?)? = null,
     ) {
         hook(target) { chain ->
-            val handle = hook(isFlipScreen, replaceResult(false))
-            val result = runWithCleanup({ handle.unhook() }) { chain.proceed() }
+            val result = fakeFlipScreen.run { chain.proceed() }
             after?.invoke(result) ?: result
         }
     }

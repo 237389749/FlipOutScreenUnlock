@@ -14,15 +14,14 @@ import com.parallelc.mixflipmod.hook.util.field
 import com.parallelc.mixflipmod.hook.util.findClass
 import com.parallelc.mixflipmod.hook.util.getField
 import com.parallelc.mixflipmod.hook.util.hook
+import com.parallelc.mixflipmod.hook.util.hookScope
 import com.parallelc.mixflipmod.hook.util.log
 import com.parallelc.mixflipmod.hook.util.method
 import com.parallelc.mixflipmod.hook.util.prefInt
-import com.parallelc.mixflipmod.hook.util.replaceResult
 import com.parallelc.mixflipmod.hook.util.runWithCleanup
 import com.parallelc.mixflipmod.hook.util.setField
 import com.parallelc.mixflipmod.module
 import io.github.libxposed.api.XposedInterface.Chain
-import io.github.libxposed.api.XposedInterface.HookHandle
 import io.github.libxposed.api.XposedInterface.Hooker
 import io.github.libxposed.api.XposedInterface.Invoker.Type
 import io.github.libxposed.api.XposedInterface.PRIORITY_LOWEST
@@ -47,11 +46,8 @@ object SystemUIHook : BaseHook() {
 
     private fun hookNotification(param: PackageReadyParam, miuiConfigs: Class<*>) {
         val clazz = param.classLoader.findClass("com.android.systemui.statusbar.notification.row.MiuiNotificationMenuRow")
-        hook(clazz.method("createMenuViews", Boolean::class.java)) { chain ->
-            val handle =
-                hook(miuiConfigs.method("isTinyScreen", Context::class.java), replaceResult(false))
-            runWithCleanup({ handle.unhook() }) { chain.proceed() }
-        }
+        val fakeTinyScreen = hookScope(miuiConfigs.method("isTinyScreen", Context::class.java)) { false }
+        hook(clazz.method("createMenuViews", Boolean::class.java)) { chain -> fakeTinyScreen.run { chain.proceed() } }
     }
 
     private fun hookControlCenter(param: PackageReadyParam, miuiConfigs: Class<*>) {
@@ -79,14 +75,12 @@ object SystemUIHook : BaseHook() {
                         isTinyScreen = styleChain.args[0] == compactStyle
                         styleChain.proceed()
                     }
+                    val fakeGetStyle = hookScope(panelClass.method("getStyle")) { styleChain ->
+                        if (isTinyScreen) verticalStyle else styleChain.proceed()
+                    }
 
                     class HookGetStyle : Hooker {
-                        override fun intercept(chain: Chain): Any? {
-                            val handle = hook(panelClass.method("getStyle")) { getStyleChain ->
-                                if (isTinyScreen) verticalStyle else getStyleChain.proceed()
-                            }
-                            return runWithCleanup({ handle.unhook() }) { chain.proceed() }
-                        }
+                        override fun intercept(chain: Chain): Any? = fakeGetStyle.run { chain.proceed() }
                     }
 
                     listOf(
@@ -161,39 +155,37 @@ object SystemUIHook : BaseHook() {
         val containerClass = param.classLoader.findClass("com.android.systemui.statusbar.phone.NotificationIconContainer")
         val isFlipTinyScreen = miuiConfigs.method("isFlipTinyScreen", Context::class.java)
         val originInvoker = module!!.getInvoker(isFlipTinyScreen).setType(Type.ORIGIN)
+        val fakeFlipTinyScreen = hookScope(isFlipTinyScreen) { false }
 
         fun isFolded(thisObject: Any?): Boolean {
             val context = thisObject?.getField("mContext") ?: return false
             return originInvoker.invoke(null, context) as? Boolean ?: false
         }
 
-        fun expandFoldedIcons(chain: Chain): Pair<HookHandle?, Int?> {
-            if (!isFolded(chain.thisObject)) return null to null
-            val handle = hook(isFlipTinyScreen, replaceResult(false))
+        fun expandFoldedIcons(chain: Chain): Int? {
             val maxIcons = chain.thisObject?.getField("mMaxIcons") as? Int
             chain.thisObject?.setField("mMaxIcons", statusBarIconMax())
-            return handle to maxIcons
+            return maxIcons
         }
 
-        fun restoreFoldedIcons(chain: Chain, handle: HookHandle?, maxIcons: Int?) {
-            handle?.unhook()
+        fun restoreFoldedIcons(chain: Chain, maxIcons: Int?) {
             maxIcons?.let { chain.thisObject?.setField("mMaxIcons", it) }
         }
 
         val foldedIconHooker = Hooker { chain ->
-            val (handle, maxIcons) = expandFoldedIcons(chain)
-            runWithCleanup({ restoreFoldedIcons(chain, handle, maxIcons) }) { chain.proceed() }
+            if (!isFolded(chain.thisObject)) return@Hooker chain.proceed()
+            val maxIcons = expandFoldedIcons(chain)
+            runWithCleanup({ restoreFoldedIcons(chain, maxIcons) }) {
+                fakeFlipTinyScreen.run { chain.proceed() }
+            }
         }
         hook(containerClass.method("calculateIconXTranslations"), PRIORITY_LOWEST, foldedIconHooker)
         hook(containerClass.method("onMeasure", Int::class.java, Int::class.java), PRIORITY_LOWEST, foldedIconHooker)
 
         val statusIconClass = param.classLoader.findClass("com.android.systemui.statusbar.views.MiuiStatusIconContainer")
         hook(statusIconClass.method("onMeasure", Int::class.java, Int::class.java)) { chain ->
-            val handle = if (isFolded(chain.thisObject)) hook(
-                isFlipTinyScreen,
-                replaceResult(false)
-            ) else null
-            runWithCleanup({ handle?.unhook() }) { chain.proceed() }
+            if (isFolded(chain.thisObject)) fakeFlipTinyScreen.run { chain.proceed() }
+            else chain.proceed()
         }
     }
 
