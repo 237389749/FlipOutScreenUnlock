@@ -2,7 +2,9 @@ package com.parallelc.mixflipmod.ui.util
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.os.UserManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -24,6 +26,7 @@ import java.util.Locale
 
 @Stable
 class InstalledAppsState internal constructor(
+    private val context: Context,
     private val packageManager: PackageManager,
     private val selfPackageName: String,
     private val needsPermission: () -> Boolean,
@@ -63,7 +66,7 @@ class InstalledAppsState internal constructor(
 
     private suspend fun loadInstalledApps(refresh: Boolean = false) {
         if (refresh) isRefreshing = true else isLoading = true
-        runCatching { loadInstalledApps(packageManager, selfPackageName) }
+        runCatching { loadInstalledApps(context, packageManager, selfPackageName) }
             .onSuccess {
                 apps = it
                 error = null
@@ -99,6 +102,7 @@ fun rememberInstalledAppsState(): InstalledAppsState {
     }
     return remember(ctx, permissionLauncher) {
         InstalledAppsState(
+            context = ctx.applicationContext,
             packageManager = ctx.packageManager,
             selfPackageName = ctx.packageName,
             needsPermission = { ctx.needsInstalledAppsPermission() },
@@ -128,27 +132,62 @@ fun Context.needsInstalledAppsPermission(): Boolean {
 
 const val GET_INSTALLED_APPS_PERMISSION = "com.android.permission.GET_INSTALLED_APPS"
 
+private fun getAllUserIds(context: Context): IntArray {
+    return try {
+        val um = context.getSystemService(Context.USER_SERVICE) as UserManager
+        val getUsers = try {
+            um.javaClass.getMethod("getUsers", Boolean::class.javaPrimitiveType)
+        } catch (_: NoSuchMethodException) {
+            um.javaClass.getMethod("getAliveUsers")
+        }
+        @Suppress("UNCHECKED_CAST")
+        val users = if (getUsers.parameterCount > 0) {
+            getUsers.invoke(um, true) as List<*>
+        } else {
+            getUsers.invoke(um) as List<*>
+        }
+        users.mapNotNull { it?.javaClass?.getField("id")?.getInt(it) }.toIntArray()
+    } catch (_: Exception) {
+        intArrayOf(0)
+    }
+}
+
+private fun getInstalledPackagesAsUser(packageManager: PackageManager, userId: Int): List<PackageInfo> {
+    return try {
+        val method = packageManager.javaClass.getDeclaredMethod(
+            "getInstalledPackagesAsUser",
+            Int::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+        )
+        method.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        method.invoke(packageManager, 0, userId) as List<PackageInfo>
+    } catch (_: Exception) {
+        if (userId == 0) packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0L))
+        else emptyList()
+    }
+}
+
 private suspend fun loadInstalledApps(
+    context: Context,
     packageManager: PackageManager,
     selfPackageName: String,
 ): List<InstalledApp> = withContext(Dispatchers.IO) {
     val collator = Collator.getInstance(Locale.getDefault())
-    packageManager.getInstalledPackages(
-        PackageManager.PackageInfoFlags.of(
-            PackageManager.MATCH_ALL.toLong()
+    val userIds = getAllUserIds(context)
+    val seen = HashSet<String>()
+    userIds.flatMap { userId ->
+        getInstalledPackagesAsUser(packageManager, userId)
+    }.mapNotNull { info ->
+        val appInfo = info.applicationInfo ?: return@mapNotNull null
+        if (info.packageName == selfPackageName) return@mapNotNull null
+        if (!seen.add(info.packageName)) return@mapNotNull null
+        InstalledApp(
+            packageName = info.packageName,
+            label = appInfo.loadLabel(packageManager).toString(),
+            appInfo = appInfo,
+            uid = appInfo.uid,
+            isSystem = appInfo.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0,
         )
-    )
-        .mapNotNull { info ->
-            val appInfo = info.applicationInfo ?: return@mapNotNull null
-            if (info.packageName == selfPackageName) return@mapNotNull null
-            InstalledApp(
-                packageName = info.packageName,
-                label = appInfo.loadLabel(packageManager).toString(),
-                appInfo = appInfo,
-                uid = appInfo.uid,
-                isSystem = appInfo.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0,
-                hasLaunchIntent = packageManager.getLaunchIntentForPackage(info.packageName) != null,
-            )
-        }
-        .sortedWith(compareBy(collator, InstalledApp::label).thenBy { it.packageName })
+    }.sortedWith(compareBy(collator, InstalledApp::label).thenBy { it.packageName })
 }
