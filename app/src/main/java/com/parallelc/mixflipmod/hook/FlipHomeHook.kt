@@ -1,12 +1,16 @@
 package com.parallelc.mixflipmod.hook
 
+import android.app.Activity
 import android.content.ComponentName
+import android.content.ContentResolver
 import android.content.Context
+import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.os.UserHandle
 import android.provider.Settings
@@ -21,6 +25,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.net.toUri
 import com.parallelc.mixflipmod.Prefs
 import com.parallelc.mixflipmod.hook.util.after
@@ -32,8 +37,10 @@ import com.parallelc.mixflipmod.hook.util.log
 import com.parallelc.mixflipmod.hook.util.method
 import com.parallelc.mixflipmod.hook.util.prefInt
 import com.parallelc.mixflipmod.hook.util.replaceResult
+import com.parallelc.mixflipmod.hook.util.setField
 import io.github.libxposed.api.XposedInterface.Hooker
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import java.io.File
 import java.lang.reflect.Method
 import java.util.WeakHashMap
 import kotlin.math.abs
@@ -47,6 +54,14 @@ object FlipHomeHook : BaseHook() {
     private const val RECENTS_MENU_BACKGROUND = "recent_menu_bg"
     private const val APP_SHORTCUT_EXTRA_MENU_TAG = "mixflipmod_app_shortcut_extra_menu"
     private const val APP_SHORTCUT_ORIGINAL_MENU_TAG = "mixflipmod_app_shortcut_original_menu"
+    private const val WIDGET_ID_PREFIX = "mixflipmod_"
+    private const val PA_PACKAGE = "com.miui.personalassistant"
+    private const val PA_PICKER_ACTIVITY = "com.miui.personalassistant.picker.business.home.pages.PickerHomeActivity"
+    private const val METHOD_IMPORT = "mixflipmod_import"
+    private const val METHOD_PING = "mixflipmod_ping"
+    private const val EXTRA_TARGET = "mixflipmod_target"
+    private const val TARGET_FLIPHOME = "fliphome"
+    private const val PA_PROVIDER_AUTHORITY = "content://com.miui.personalassistant.widget.external"
     private val recentsTaskMenus = WeakHashMap<View, RecentsTaskMenuHandle>()
 
     private data class TaskViewState(
@@ -93,6 +108,7 @@ object FlipHomeHook : BaseHook() {
             Prefs.FLIPHOME_RECENTS_STYLE -> hookRecentsStyle(param)
             Prefs.FLIPHOME_RECENTS_LONG_PRESS_MENU -> hookRecentsLongPressMenu(param)
             Prefs.FLIPHOME_APP_LONG_PRESS_MENU -> hookAppLongPressMenu(param)
+            Prefs.WIDGET_IMPORT -> hookWidgetImport(param)
         }
     }
 
@@ -237,6 +253,251 @@ object FlipHomeHook : BaseHook() {
             extendNativeAppShortcutMenu(shortcutMenu, fragment, packageName, componentName, user)
             result
         })
+    }
+
+    private fun hookWidgetImport(param: PackageReadyParam) {
+        val flipAppClass = param.classLoader.findClass("com.miui.fliphome.FlipApplication")
+        val flipMaMlWidgetCompatClass = param.classLoader.findClass("com.miui.fliphome.widget.ui.maml.FlipMaMlWidgetCompat")
+        val getFlipAppInstance: Method = flipAppClass.method("getInstance")
+        val getResDirMethod: Method = flipMaMlWidgetCompatClass.method("getResDir", Context::class.java)
+
+        var widgetSettingsActivityRef = java.lang.ref.WeakReference<Activity>(null)
+
+        var cachedResDir: File? = null
+        fun getResDir(): File {
+            return cachedResDir ?: run {
+                val app = getFlipAppInstance.invoke(null)
+                val dpCtx = (app as Context).createDeviceProtectedStorageContext()
+                File(getResDirMethod.invoke(null, dpCtx) as String).also { cachedResDir = it }
+            }
+        }
+
+        fun deleteWidgetFiles(id: String) {
+            runCatching {
+                val resDir = getResDir()
+                resDir.listFiles()?.forEach { file ->
+                    if (file.nameWithoutExtension.equals(id, ignoreCase = true)) {
+                        if (file.isDirectory) file.deleteRecursively() else file.delete()
+                    }
+                }
+            }.onFailure { log("deleteWidgetFiles failed: $id", it) }
+        }
+
+        fun isImportedWidget(id: String): Boolean = id.startsWith(WIDGET_ID_PREFIX, ignoreCase = true)
+
+        // append custom widgets to loadAllWidget result
+        val flipWatchDefaultConfigClass = param.classLoader.findClass("com.miui.fliphome.widget.model.FlipWatchDefaultConfig")
+        val loadSingleWidgetMethod: java.lang.reflect.Method = flipWatchDefaultConfigClass.method("loadSingleWidget", String::class.java)
+        hook(flipWatchDefaultConfigClass.method("loadAllWidget"), after { _, result ->
+            @Suppress("UNCHECKED_CAST")
+            val list = (result as? MutableList<Any?>)
+                ?: (result as? List<Any?>)?.toMutableList()
+                ?: return@after result
+            val resDir = runCatching { getResDir() }.getOrNull() ?: return@after list
+            val existingIds = list.mapNotNullTo(HashSet()) { (it?.getField("mFileName") as? String)?.lowercase() }
+            val importedIds = resDir.listFiles { f ->
+                f.isFile && f.name.startsWith(WIDGET_ID_PREFIX, ignoreCase = true) && f.extension.equals("mtz", ignoreCase = true)
+            }?.map { it.nameWithoutExtension } ?: emptyList()
+
+            importedIds.forEach { id ->
+                val idKey = id.lowercase()
+                if (idKey in existingIds) return@forEach
+                val extractedDir = File(resDir, id)
+                if (extractedDir.isDirectory) {
+                    runCatching { extractedDir.deleteRecursively() }
+                        .onFailure { log("delete extracted widget dir failed: $id", it) }
+                }
+                val widgetInfo = runCatching {
+                    loadSingleWidgetMethod.invoke(null, id)
+                }.onFailure { log("loadSingleWidget failed: $id", it) }.getOrNull()
+                if (widgetInfo != null) {
+                    runCatching { widgetInfo.setField("mShowInSetPage", list.size) }
+                    existingIds.add(idKey)
+                    list.add(widgetInfo)
+                } else {
+                    deleteWidgetFiles(id)
+                }
+            }
+            list
+        })
+
+        // receive import requests from PA via ContentProvider IPC
+        val flipHomeProviderClass = param.classLoader.findClass("com.miui.fliphome.FlipHomeProvider")
+        hook(flipHomeProviderClass.method("call", String::class.java, String::class.java, android.os.Bundle::class.java), Hooker { chain ->
+            val callingPackage = chain.thisObject.callMethod("getCallingPackage") as? String
+            if (callingPackage != PA_PACKAGE) return@Hooker chain.proceed()
+            val method = chain.args[0] as? String
+            if (method != METHOD_IMPORT) return@Hooker chain.proceed()
+            val destName = chain.args[1] as? String
+            @Suppress("DEPRECATION")
+            val uri = (chain.args[2] as? android.os.Bundle)?.getParcelable<Uri>("uri")
+            if (destName == null || uri == null) {
+                log("FlipHomeProvider import: missing destName or uri")
+                return@Hooker android.os.Bundle().apply { putBoolean("success", false) }
+            }
+            val context = chain.thisObject.callMethod("getContext") as? Context
+                ?: return@Hooker android.os.Bundle().apply { putBoolean("success", false) }
+            runCatching {
+                val resDir = getResDir()
+                resDir.mkdirs()
+                if (!copyMtzFromUri(uri, context.contentResolver, resDir, destName)) {
+                    log("FlipHomeProvider import: rejected input destName=$destName")
+                    return@Hooker android.os.Bundle().apply { putBoolean("success", false) }
+                }
+            }.onFailure {
+                log("FlipHomeProvider import failed", it)
+                return@Hooker android.os.Bundle().apply { putBoolean("success", false) }
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                val vm = runCatching { widgetSettingsActivityRef.get()?.getField("mViewModel") }.getOrNull() ?: return@post
+                vm.setField("mAllWidgets", null)
+                vm.callMethod("refreshShowListAsync")
+            }
+            android.os.Bundle().apply { putBoolean("success", true) }
+        })
+
+        // add import entry point to action bar; track current Activity for IPC refresh
+        val widgetSettingsActivityClass = param.classLoader.findClass("com.miui.fliphome.settings.widget.WidgetSettingsActivity")
+        hook(widgetSettingsActivityClass.method("onCreate", android.os.Bundle::class.java), after { chain, result ->
+            val activity = chain.thisObject as? Activity ?: return@after result
+            widgetSettingsActivityRef = java.lang.ref.WeakReference(activity)
+            val actionBar = runCatching { activity.callMethod("getAppCompatActionBar") }.getOrNull()
+            if (actionBar != null) {
+                val actions = createPickerButton(activity) {
+                    Thread {
+                        val active = runCatching {
+                            val result = activity.contentResolver.call(
+                                PA_PROVIDER_AUTHORITY.toUri(),
+                                METHOD_PING,
+                                null,
+                                null
+                            )
+                            result?.getBoolean("active", false) == true
+                        }.getOrElse { false }
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            if (!active) {
+                                Toast.makeText(activity, "智能助理外屏小部件选择器未开启！", Toast.LENGTH_SHORT).show()
+                            } else {
+                                runCatching { startPersonalAssistantPicker(activity) }
+                                    .onFailure { e -> log("startPersonalAssistantPicker failed", e) }
+                            }
+                        }
+                    }.start()
+                }
+                runCatching { actionBar.callMethod("setEndView", actions) }
+                    .onFailure { log("setEndView failed", it) }
+            }
+            result
+        })
+
+        // add long-press delete on custom widget items
+        val widgetChildAdapterClass = param.classLoader.findClass("com.miui.fliphome.settings.widget.WidgetChildAdapter")
+        val childViewHolderClass = param.classLoader.findClass($$"com.miui.fliphome.settings.widget.WidgetChildAdapter$ChildViewHolder")
+        hook(widgetChildAdapterClass.method("onBindViewHolder", childViewHolderClass, Int::class.javaPrimitiveType!!), after { chain, result ->
+            val adapter = chain.thisObject
+            val holder = chain.args[0] ?: return@after result
+            val position = chain.args[1] as? Int ?: return@after result
+            val ivPreview = holder.getField("ivPreview") as? ImageView ?: return@after result
+            @Suppress("UNCHECKED_CAST")
+            val list = adapter.getField("mList") as? List<Any?> ?: return@after result
+            val item = list.getOrNull(position) ?: return@after result
+            val id = item.getField("id") as? String ?: return@after result
+            if (!isImportedWidget(id)) {
+                ivPreview.setOnLongClickListener(null)
+                return@after result
+            }
+
+            ivPreview.setOnLongClickListener { view ->
+                runCatching {
+                    val builderClass = view.context.classLoader.findClass($$"miuix.appcompat.app.AlertDialog$Builder")
+                    val builder = builderClass.getConstructor(Context::class.java).newInstance(view.context)
+                    val listener = DialogInterface.OnClickListener { _, _ ->
+                        runCatching {
+                            deleteWidgetFiles(id)
+                            adapter.getField("mEditor")?.callMethod("removeWidget", item)
+                            val vm = widgetSettingsActivityRef.get()?.getField("mViewModel")
+                            if (vm != null) {
+                                vm.setField("mAllWidgets", null)
+                                vm.callMethod("refreshShowListAsync")
+                            }
+                        }.onFailure { log("delete widget failed: $id", it) }
+                    }
+                    builder.callMethod("setTitle", "删除小部件")
+                    builder.callMethod("setMessage", "确认删除小部件？")
+                    builder.callMethod("setPositiveButton", "删除", listener)
+                    builder.callMethod("setNegativeButton", "取消", null)
+                    builder.callMethod("show")
+                }.onFailure {
+                    log("delete confirm dialog failed", it)
+                    Toast.makeText(view.context, "删除确认框打开失败", Toast.LENGTH_SHORT).show()
+                }
+                true
+            }
+            result
+        })
+
+        // imported widgets may not provide zh_CN/en_US preview variants
+        val widgetViewModelClass = param.classLoader.findClass("com.miui.fliphome.settings.widget.WidgetViewModel")
+        val flipWidgetInfoClass = param.classLoader.findClass("com.miui.fliphome.widget.FlipWidgetInfo")
+        hook(widgetViewModelClass.method("getPreviewPathOfLanguage", flipWidgetInfoClass), Hooker { chain ->
+            val info = chain.args[0] ?: return@Hooker chain.proceed()
+            val id = info.getField("mFileName") as? String ?: return@Hooker chain.proceed()
+            if (!isImportedWidget(id)) return@Hooker chain.proceed()
+            val isDarkMode = chain.thisObject.getField("isDarkMode") as? Boolean ?: false
+            val path = if (isDarkMode) {
+                info.getField("mDarkPreviewPath") as? String
+            } else {
+                info.getField("mLightPreviewPath") as? String
+            }
+            path ?: chain.proceed()
+        })
+    }
+
+    private fun createPickerButton(context: Context, onClick: () -> Unit): LinearLayout {
+        val tv = TypedValue()
+        context.theme.resolveAttribute(android.R.attr.colorPrimary, tv, true)
+        val density = context.resources.displayMetrics.density
+        val button = TextView(context).apply {
+            text = "添加"
+            textSize = 15f
+            setTextColor(tv.data)
+            gravity = Gravity.CENTER
+            val hPad = (16 * density).toInt()
+            val minSize = (48 * density).toInt()
+            setPadding(hPad, 0, hPad, 0)
+            minWidth = minSize
+            minHeight = minSize
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(button)
+        }
+    }
+
+    private fun startPersonalAssistantPicker(context: Context) {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW).apply {
+                component = ComponentName(PA_PACKAGE, PA_PICKER_ACTIVITY)
+                putExtra("openSource", 2)
+                putExtra("isCanDrag", true)
+                putExtra("picker_tip_source", 10)
+                putExtra(EXTRA_TARGET, TARGET_FLIPHOME)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+    }
+
+    private fun copyMtzFromUri(uri: Uri, contentResolver: ContentResolver, resDir: File, destName: String): Boolean {
+        val baseName = destName.substringBeforeLast('.')
+        val destFile = File(resDir, destName)
+        File(resDir, baseName).takeIf { it.isDirectory }?.deleteRecursively()
+        val input = contentResolver.openInputStream(uri) ?: return false
+        input.use { destFile.outputStream().use { out -> it.copyTo(out) } }
+        return true
     }
 
     private fun extendNativeAppShortcutMenu(

@@ -58,6 +58,9 @@ object Prefs {
 
     const val DEFAULT_FLIP_IME_PKG = "com.sohu.inputmethod.sogou.xiaomi"
 
+    // com.miui.personalassistant
+    const val WIDGET_IMPORT = "widget_import"
+
     // com.sohu.inputmethod.sogou.xiaomi
     const val SOGOU_TOOLBAR_FIX   = "sogou_toolbar_fix"
     const val SOGOU_CLIPBOARD_FIX = "sogou_clipboard_fix"

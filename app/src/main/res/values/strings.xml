@@ -62,6 +62,8 @@
     <string name="pref_fliphome_recents_long_press_menu_summary">纵向显示功能按钮，横向打开应用信息</string>
     <string name="pref_fliphome_app_long_press_menu">应用桌面长按菜单</string>
     <string name="pref_fliphome_app_long_press_menu_summary">增加应用信息选项</string>
+    <string name="pref_widget_import">支持添加外屏小部件</string>
+    <string name="pref_widget_import_summary">在小部件设置页调用，需重启外屏桌面</string>
 
     <string name="pref_sogou_toolbar_fix">恢复外屏工具栏</string>
     <string name="pref_sogou_clipboard_fix">恢复外屏剪贴板候选词</string>

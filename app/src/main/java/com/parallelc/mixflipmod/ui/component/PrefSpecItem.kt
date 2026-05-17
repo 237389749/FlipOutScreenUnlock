@@ -29,7 +29,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import com.parallelc.mixflipmod.model.OptionValue
 import com.parallelc.mixflipmod.model.PrefSpec
-import com.parallelc.mixflipmod.ui.util.checkScope
+import com.parallelc.mixflipmod.model.appConfigs
+import com.parallelc.mixflipmod.ui.util.checkScopes
+import com.parallelc.mixflipmod.ui.util.scopePackage
 import io.github.libxposed.service.XposedService
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.DropdownArrowEndAction
@@ -52,7 +54,6 @@ fun PrefSpecItem(
     spec: PrefSpec,
     prefs: SharedPreferences,
     xposedService: XposedService?,
-    scopePackage: String,
 ) {
     when (spec) {
         is PrefSpec.Switch -> {
@@ -64,7 +65,10 @@ fun PrefSpecItem(
                 onCheckedChange = {
                     checked.value = it
                     prefs.edit { putBoolean(spec.prefKey, it) }
-                    runCatching { checkScope(xposedService, scopePackage, it) }
+                    val scopePackages = appConfigs
+                        .filter { cfg -> cfg.prefs.filterIsInstance<PrefSpec.Switch>().any { s -> s.prefKey == spec.prefKey } }
+                        .map { it.scopePackage }
+                    runCatching { checkScopes(xposedService, scopePackages, it) }
                 },
             )
             if (checked.value) {
@@ -73,7 +77,6 @@ fun PrefSpecItem(
                         spec = it,
                         prefs = prefs,
                         xposedService = xposedService,
-                        scopePackage = scopePackage,
                     )
                 }
             }

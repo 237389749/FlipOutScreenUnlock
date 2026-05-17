@@ -47,7 +47,7 @@ import com.parallelc.mixflipmod.R
 import com.parallelc.mixflipmod.ui.component.AppIcon
 import com.parallelc.mixflipmod.ui.model.InstalledApp
 import com.parallelc.mixflipmod.ui.util.XposedServiceState
-import com.parallelc.mixflipmod.ui.util.checkScope
+import com.parallelc.mixflipmod.ui.util.checkScopes
 import com.parallelc.mixflipmod.ui.util.filterByQuery
 import com.parallelc.mixflipmod.ui.util.rememberInstalledAppsState
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -199,7 +199,7 @@ fun FlipScreenModeScreen(
                                         val key = Prefs.flipScreenModeKey(app.packageName)
                                         if (mode == FlipScreenMode.DEFAULT) remove(key) else putInt(key, mode.prefValue)
                                     }
-                                    runCatching { checkScope(XposedServiceState.service, "system", true) }
+                                    runCatching { checkScopes(XposedServiceState.service, listOf("system"), true) }
                                     modeVersion++
                                 },
                                 onScaleChanged = { scale ->
