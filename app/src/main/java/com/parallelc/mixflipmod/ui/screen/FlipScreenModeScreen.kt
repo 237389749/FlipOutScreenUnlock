@@ -99,7 +99,6 @@ fun FlipScreenModeScreen(
     val visibleApps = remember(appsState.apps, query, showSystemApps, modeVersion) {
         appsState.apps
             .asSequence()
-            .filter { it.hasLaunchIntent }
             .filter { showSystemApps || !it.isSystem }
             .toList()
             .filterByQuery(query)

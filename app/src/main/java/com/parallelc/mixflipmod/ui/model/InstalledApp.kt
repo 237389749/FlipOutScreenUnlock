@@ -8,7 +8,6 @@ data class InstalledApp(
     val appInfo: ApplicationInfo,
     val uid: Int,
     val isSystem: Boolean,
-    val hasLaunchIntent: Boolean,
 ) {
     val searchableText: String get() = "$label $packageName"
 }
