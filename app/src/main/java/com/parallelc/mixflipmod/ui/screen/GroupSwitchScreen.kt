@@ -24,7 +24,7 @@ import com.parallelc.mixflipmod.model.AppConfig
 import com.parallelc.mixflipmod.ui.component.AppIcon
 import com.parallelc.mixflipmod.ui.util.XposedServiceState
 import com.parallelc.mixflipmod.ui.util.appLabel
-import com.parallelc.mixflipmod.ui.util.checkScope
+import com.parallelc.mixflipmod.ui.util.checkScopes
 import com.parallelc.mixflipmod.ui.util.scopePackage
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -104,7 +104,7 @@ fun GroupSwitchScreen(
                                 checked.value = it
                                 prefs.edit { putBoolean(prefKey, it) }
                                 runCatching {
-                                    checkScope(XposedServiceState.service, config.scopePackage, it)
+                                    checkScopes(XposedServiceState.service, listOf(config.scopePackage), it)
                                 }
                             },
                         )

@@ -46,12 +46,14 @@ sealed class PrefSpec {
     abstract val titleRes: Int?
     @get:StringRes
     abstract val summaryRes: Int?
+    open val hidden: Boolean get() = false
 
     data class Switch(
         override val prefKey: String,
         @param:StringRes override val titleRes: Int,
         @param:StringRes override val summaryRes: Int? = null,
         val children: List<PrefSpec> = emptyList(),
+        override val hidden: Boolean = false,
     ) : PrefSpec()
 
     data class IntInput(
@@ -161,6 +163,14 @@ private val flipHomeConfig = AppConfig(
         ),
         PrefSpec.Switch(Prefs.FLIPHOME_RECENTS_LONG_PRESS_MENU, R.string.pref_fliphome_recents_long_press_menu, R.string.pref_fliphome_recents_long_press_menu_summary),
         PrefSpec.Switch(Prefs.FLIPHOME_APP_LONG_PRESS_MENU, R.string.pref_fliphome_app_long_press_menu, R.string.pref_fliphome_app_long_press_menu_summary),
+        PrefSpec.Switch(Prefs.WIDGET_IMPORT, R.string.pref_widget_import, R.string.pref_widget_import_summary, hidden = true),
+    ),
+)
+
+private val personalAssistantConfig = AppConfig(
+    packageName = "com.miui.personalassistant",
+    prefs = listOf(
+        PrefSpec.Switch(Prefs.WIDGET_IMPORT, R.string.pref_widget_import, R.string.pref_widget_import_summary),
     ),
 )
 
@@ -182,6 +192,7 @@ internal val configNodes = listOf(
     ConfigNode.Package(systemFrameworkConfig),
     ConfigNode.Package(systemUiConfig),
     ConfigNode.Package(flipHomeConfig),
+    ConfigNode.Package(personalAssistantConfig),
     ConfigNode.Package(sogouConfig),
 )
 

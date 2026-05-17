@@ -51,7 +51,6 @@ import com.parallelc.mixflipmod.ui.screen.FlipScreenModeScreen
 import com.parallelc.mixflipmod.ui.screen.GroupSwitchScreen
 import com.parallelc.mixflipmod.ui.screen.SubScreen
 import com.parallelc.mixflipmod.ui.util.appLabel
-import com.parallelc.mixflipmod.ui.util.scopePackage
 import com.parallelc.mixflipmod.ui.util.XposedServiceState
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.DropdownImpl
@@ -232,12 +231,11 @@ fun MainScreen() {
                 ) {
                     item {
                         Card(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 12.dp)) {
-                            cfg.prefs.forEach { spec ->
+                            cfg.prefs.filter { !it.hidden }.forEach { spec ->
                                 PrefSpecItem(
                                     spec = spec,
                                     prefs = remotePrefs,
                                     xposedService = xposedService,
-                                    scopePackage = cfg.scopePackage,
                                 )
                             }
                             if (cfg.packageName == "android") {

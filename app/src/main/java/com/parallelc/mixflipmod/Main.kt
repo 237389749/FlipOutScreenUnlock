@@ -2,6 +2,7 @@ package com.parallelc.mixflipmod
 
 import com.parallelc.mixflipmod.hook.FlipHomeHook
 import com.parallelc.mixflipmod.hook.HideOuterHook
+import com.parallelc.mixflipmod.hook.PersonalAssistantHook
 import com.parallelc.mixflipmod.hook.SogouHook
 import com.parallelc.mixflipmod.hook.SystemHook
 import com.parallelc.mixflipmod.hook.SystemUIHook
@@ -19,6 +20,7 @@ class Main : XposedModule() {
         SystemUIHook,
         HideOuterHook,
         SogouHook,
+        PersonalAssistantHook,
     )
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {

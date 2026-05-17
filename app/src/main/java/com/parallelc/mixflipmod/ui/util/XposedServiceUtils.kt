@@ -74,9 +74,9 @@ fun checkEnabledScopes(service: XposedService, prefs: SharedPreferences) {
     requestMissingScopes(service, enabledScopePackages)
 }
 
-fun checkScope(service: XposedService?, scopePackage: String, enabled: Boolean) {
+fun checkScopes(service: XposedService?, scopePackages: List<String>, enabled: Boolean) {
     if (!enabled || service == null) return
-    requestMissingScopes(service, listOf(scopePackage))
+    requestMissingScopes(service, scopePackages)
 }
 
 private fun requestMissingScopes(service: XposedService, packages: List<String>) {
