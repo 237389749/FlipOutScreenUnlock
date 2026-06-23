@@ -34,6 +34,7 @@ object SystemHook {
         safeHook("[android] ${Prefs.SYSTEM_FLIP_CONTINUITY}") { hookFlipContinuity(param) }
         safeHook("[android] ${Prefs.SYSTEM_FLIP_IME_PKG}") { hookFlipInputMethod(param) }
         safeHook("[android] ${Prefs.SYSTEM_FLIP_SCREEN_MODE}") { hookFlipScreenMode(param) }
+        safeHook("[android] ${Prefs.SYSTEM_FLIP_INPUT_METHOD_FIX}") { hookFlipInputMethodFix(param) }
     }
 
     // ── Prefs cache ──────────────────────────────────────────────
@@ -51,6 +52,7 @@ object SystemHook {
     private fun refreshSystemPrefsCache(prefs: SharedPreferences) {
         systemCompatConfigEnabled = prefs.getBoolean(Prefs.SYSTEM_COMPAT_CONFIG, false)
         systemFlipContinuityEnabled = prefs.getBoolean(Prefs.SYSTEM_FLIP_CONTINUITY, false)
+        systemFlipInputMethodFixEnabled = prefs.getBoolean(Prefs.SYSTEM_FLIP_INPUT_METHOD_FIX, false)
         flipInputMethodPackageCache = normalizeFlipInputMethodPackage(
             prefs.getString(Prefs.SYSTEM_FLIP_IME_PKG, Prefs.DEFAULT_FLIP_IME_PKG)
         )
@@ -75,6 +77,9 @@ object SystemHook {
             }
             key == Prefs.SYSTEM_FLIP_CONTINUITY -> {
                 systemFlipContinuityEnabled = prefs.getBoolean(key, false)
+            }
+            key == Prefs.SYSTEM_FLIP_INPUT_METHOD_FIX -> {
+                systemFlipInputMethodFixEnabled = prefs.getBoolean(key, false)
             }
             key == Prefs.SYSTEM_FLIP_IME_PKG -> {
                 flipInputMethodPackageCache = normalizeFlipInputMethodPackage(
@@ -134,6 +139,18 @@ object SystemHook {
         val c = param.classLoader.findClass("com.android.server.wm.InterceptActivityController")
         hook(c.method("isFlipContinuityEnabledFromSetting", String::class.java, Int::class.java, String::class.java)) { chain ->
             if (systemFlipContinuityEnabled) true else chain.proceed()
+        }
+    }
+
+    // ── Flip input method fix ───────────────────────────────────────
+
+    private fun hookFlipInputMethodFix(param: SystemServerStartingParam) {
+        val immServiceClass = param.classLoader.findClass("com.android.server.inputmethod.InputMethodManagerServiceImpl")
+        hook(immServiceClass.method("shouldShowCurrentInput", android.content.Context::class.java)) { chain ->
+            if (systemFlipInputMethodFixEnabled) true else chain.proceed()
+        }
+        hook(immServiceClass.method("makeRotateToast")) { chain ->
+            if (systemFlipInputMethodFixEnabled) null else chain.proceed()
         }
     }
 
@@ -445,6 +462,8 @@ object SystemHook {
     private var systemCompatConfigEnabled = false
     @Volatile
     private var systemFlipContinuityEnabled = false
+    @Volatile
+    private var systemFlipInputMethodFixEnabled = false
     @Volatile
     private var flipInputMethodPackageCache = Prefs.DEFAULT_FLIP_IME_PKG
     @Volatile

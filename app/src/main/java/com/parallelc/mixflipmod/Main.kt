@@ -1,11 +1,14 @@
 package com.parallelc.mixflipmod
 
+import com.parallelc.mixflipmod.hook.ActivityLifecycleFixHook
+import com.parallelc.mixflipmod.hook.CutoutFixHook
 import com.parallelc.mixflipmod.hook.FlipHomeHook
 import com.parallelc.mixflipmod.hook.HideOuterHook
 import com.parallelc.mixflipmod.hook.PersonalAssistantHook
 import com.parallelc.mixflipmod.hook.SogouHook
 import com.parallelc.mixflipmod.hook.SystemHook
 import com.parallelc.mixflipmod.hook.SystemUIHook
+import com.parallelc.mixflipmod.hook.WatchOverlayDisableHook
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
@@ -21,6 +24,8 @@ class Main : XposedModule() {
         HideOuterHook,
         SogouHook,
         PersonalAssistantHook,
+        CutoutFixHook,
+        WatchOverlayDisableHook,
     )
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
@@ -29,6 +34,7 @@ class Main : XposedModule() {
 
     override fun onSystemServerStarting(param: SystemServerStartingParam) {
         SystemHook.hook(param)
+        ActivityLifecycleFixHook.hook(param)
     }
 
     override fun onPackageReady(param: PackageReadyParam) {

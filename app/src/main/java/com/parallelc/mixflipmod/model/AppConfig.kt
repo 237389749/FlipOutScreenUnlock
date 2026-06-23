@@ -114,6 +114,8 @@ private val systemFrameworkConfig = AppConfig(
     prefs = listOf(
         PrefSpec.Switch(Prefs.SYSTEM_COMPAT_CONFIG, R.string.pref_system_compat_config),
         PrefSpec.Switch(Prefs.SYSTEM_FLIP_CONTINUITY, R.string.pref_system_flip_continuity, R.string.pref_system_flip_continuity_summary),
+        PrefSpec.Switch(Prefs.SYSTEM_CUTOUT_FIX, R.string.pref_system_cutout_fix, R.string.pref_system_cutout_fix_summary),
+        PrefSpec.Switch(Prefs.SYSTEM_FLIP_INPUT_METHOD_FIX, R.string.pref_system_flip_input_method_fix, R.string.pref_system_flip_input_method_fix_summary),
         PrefSpec.OptionSelect(
             Prefs.SYSTEM_FLIP_IME_PKG,
             R.string.pref_system_flip_ime_pkg,
@@ -164,6 +166,7 @@ private val flipHomeConfig = AppConfig(
         PrefSpec.Switch(Prefs.FLIPHOME_RECENTS_LONG_PRESS_MENU, R.string.pref_fliphome_recents_long_press_menu, R.string.pref_fliphome_recents_long_press_menu_summary),
         PrefSpec.Switch(Prefs.FLIPHOME_APP_LONG_PRESS_MENU, R.string.pref_fliphome_app_long_press_menu, R.string.pref_fliphome_app_long_press_menu_summary),
         PrefSpec.Switch(Prefs.WIDGET_IMPORT, R.string.pref_widget_import, R.string.pref_widget_import_summary, hidden = true),
+        PrefSpec.Switch(Prefs.FLIPHOME_WATCH_OVERLAY_AGGRESSIVE, R.string.pref_fliphome_watch_overlay_aggressive, R.string.pref_fliphome_watch_overlay_aggressive_summary),
     ),
 )
 

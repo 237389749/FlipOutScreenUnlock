@@ -65,6 +65,13 @@
     <string name="pref_widget_import">支持添加外屏小部件</string>
     <string name="pref_widget_import_summary">在小部件设置页调用，需重启外屏桌面</string>
 
+    <string name="pref_system_cutout_fix">清除外屏挖孔区域</string>
+    <string name="pref_system_cutout_fix_summary">彻底消除外屏摄像头挖孔，包括 AOD 和相机显示</string>
+    <string name="pref_system_flip_input_method_fix">强制外屏横屏输入</string>
+    <string name="pref_system_flip_input_method_fix_summary">强制外屏横屏时显示输入法并消除旋转提示</string>
+    <string name="pref_fliphome_watch_overlay_aggressive">强力禁用外屏小部件</string>
+    <string name="pref_fliphome_watch_overlay_aggressive_summary">更彻底地禁用外屏小部件覆盖层，防止触摸穿透</string>
+
     <string name="pref_sogou_toolbar_fix">恢复外屏工具栏</string>
     <string name="pref_sogou_clipboard_fix">恢复外屏剪贴板候选词</string>
 
