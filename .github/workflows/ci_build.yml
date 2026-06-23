@@ -7,35 +7,102 @@ on:
     tags: [ v* ]
     paths-ignore:
       - '*.md'
-      - '.github/**'
-      - '!.github/workflows/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
     types: [ opened, synchronize, reopened ]
+    paths-ignore:
+      - '*.md'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug --continue
+
+  build_debug:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Build Debug
+        run: |
+          echo 'org.gradle.caching=true' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.parallel=true' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8' >> ~/.gradle/gradle.properties
+          ./gradlew :app:assembleDebug
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          path: app/build/outputs/apk/debug/*.apk
+          name: MixFlipMod_debug_${{ github.event.pull_request.head.sha }}
+
+  build_release:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Write key
+      - name: Restore signing key
+        env:
+          KEY_STORE: ${{ secrets.KEY_STORE }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ ! -z "${{ secrets.KEY_STORE }}" ]; then
-            echo androidStorePassword='${{ secrets.KEY_STORE_PASSWORD }}' >> gradle.properties
-            echo androidKeyAlias='${{ secrets.ALIAS }}' >> gradle.properties
-            echo androidKeyPassword='${{ secrets.KEY_PASSWORD }}' >> gradle.properties
-            echo androidStoreFile='key.jks' >> gradle.properties
-            echo ${{ secrets.KEY_STORE }} | base64 --decode > key.jks
+          if [ -n "${KEY_STORE}" ]; then
+            echo "androidStoreFile=key.jks" >> gradle.properties
+            echo "androidStorePassword=${KEY_STORE_PASSWORD}" >> gradle.properties
+            echo "androidKeyAlias=${KEY_ALIAS}" >> gradle.properties
+            echo "androidKeyPassword=${KEY_PASSWORD}" >> gradle.properties
+            echo "${KEY_STORE}" | base64 --decode > key.jks
+            echo "Signing configured"
+          else
+            echo "::warning::KEY_STORE secret not set — building unsigned"
           fi
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
+          distribution: temurin
           java-version: "17"
 
       - name: Setup Gradle
@@ -47,21 +114,21 @@ jobs:
         run: |
           echo 'org.gradle.caching=true' >> ~/.gradle/gradle.properties
           echo 'org.gradle.parallel=true' >> ~/.gradle/gradle.properties
-          echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8 -XX:+UseParallelGC' >> ~/.gradle/gradle.properties
-
+          echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8' >> ~/.gradle/gradle.properties
           ./gradlew :app:assembleRelease
-          echo "APK_PATH=$(find app/build/outputs/apk/release -name '*.apk')" >> $GITHUB_ENV
 
-      - name: Set NAME_SUFFIX
+      - name: Set artifact name
+        id: artifact_name
         run: |
-          if [ "${{ github.ref_type }}" == "tag" ]; then
-            echo "NAME_SUFFIX=${{ github.ref_name }}" >> $GITHUB_ENV
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            SUFFIX="${{ github.ref_name }}"
           else
-            echo "NAME_SUFFIX=${{ github.event.head_commit.id }}" >> $GITHUB_ENV
+            SUFFIX="${{ github.sha }}"
           fi
+          echo "suffix=${SUFFIX}" >> $GITHUB_OUTPUT
 
-      - name: Upload Artifacts
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ env.APK_PATH }}
-          name: MixFlipMod_${{ env.NAME_SUFFIX }}
+          path: app/build/outputs/apk/release/*.apk
+          name: MixFlipMod_${{ steps.artifact_name.outputs.suffix }}

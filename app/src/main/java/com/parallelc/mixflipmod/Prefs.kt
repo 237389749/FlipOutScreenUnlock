@@ -8,6 +8,8 @@ object Prefs {
     const val SYSTEM_FLIP_CONTINUITY   = "system_flip_continuity"
     const val SYSTEM_FLIP_SCREEN_MODE  = "system_flip_screen_mode"
     const val SYSTEM_FLIP_IME_PKG      = "system_flip_ime_pkg"
+    const val SYSTEM_CUTOUT_FIX        = "system_cutout_fix"
+    const val SYSTEM_FLIP_INPUT_METHOD_FIX = "system_flip_input_method_fix"
 
     // com.android.systemui
     const val SYSUI_NOTIFICATION       = "sysui_notification"
@@ -57,6 +59,12 @@ object Prefs {
     fun flipScreenScalePackage(key: String) = key.removePrefix(FLIP_SCREEN_SCALE_PREFIX)
 
     const val DEFAULT_FLIP_IME_PKG = "com.sohu.inputmethod.sogou.xiaomi"
+
+    // com.miui.fliphome (additional)
+    const val FLIPHOME_WATCH_OVERLAY_AGGRESSIVE = "fliphome_watch_overlay_aggressive"
+
+    // activity lifecycle (global)
+    const val ACTIVITY_CUTOUT_MODE = "activity_cutout_mode"
 
     // com.miui.personalassistant
     const val WIDGET_IMPORT = "widget_import"
