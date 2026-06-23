@@ -32,7 +32,7 @@ object WatchOverlayDisableHook : BaseHook() {
         val cls = cl.findClass("com.miui.fliphome.widget.WatchOverlayWindow\$CheckAppConfigRunnable")
         hook(cls.method("checkShouldHideWidget", PackageManager::class.java, ComponentName::class.java), after { chain, result ->
             runCatching {
-                val outer = chain.thisObject.getField("this$0")
+                val outer = chain.thisObject.getField("this$0") ?: return@runCatching
                 outer.setField("mIsHideAppForeground", true)
                 outer.callMethod("refreshWindow", 2, true)
             }.onFailure { log("WatchOverlay: checkShouldHideWidget after hook failed", it) }
